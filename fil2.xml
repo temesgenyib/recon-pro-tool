@@ -1,0 +1,12 @@
+<bankReport>
+    <customer>
+        <id>100027</id>
+        <name>Temesgen</name>
+        <balance>7500.00</balance>
+    </customer>
+    <customer>
+        <id>100028</id>
+        <name>Shiferaw</name>
+        <balance>12000.50</balance>
+    </customer>
+</bankReport>

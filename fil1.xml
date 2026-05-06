@@ -1,0 +1,12 @@
+<bankReport>
+    <customer>
+        <id>100025</id>
+        <name>Teme</name>
+        <balance>7500.00</balance>
+    </customer>
+    <customer>
+        <id>100026</id>
+        <name>Shif</name>
+        <balance>12000.50</balance>
+    </customer>
+</bankReport>
