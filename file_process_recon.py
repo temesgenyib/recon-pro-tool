@@ -18,8 +18,8 @@ def run_streamlit_reconciliation():
         st.write(f"Server Time: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
         
         st.divider()
-        st.markdown("**👨‍💻 Developed By:**")
-        st.markdown("### Temesgen Yibeltal")
+        
+        st.markdown("### 👨‍💻Temesgen Yibeltal")
         
         # Contact Information
         st.markdown(f"""
