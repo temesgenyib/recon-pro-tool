@@ -18,15 +18,15 @@ def run_streamlit_reconciliation():
         
         # --- NEW: Developer Contact Area ---
         st.divider()
-        st.markdown("### 👨‍💻 Developed By")
-        st.markdown("**Temesgen Yib**")
+       
+        st.markdown("**👨‍💻Temesgen Yibeltal**")
         
         # Links are better formatted as clickable icons or short text
         contact_html = """
         <div style="font-size: 0.9em;">
-            <p>📞 Phone: +XXX XXXX XXXX</p>
+            <p>📞 Phone: +251941625829</p>
             <p>✉️ Email: temesgen@example.com</p>
-            <p>🔗 <a href="https://www.linkedin.com/in/temesgenyib" target="_blank">LinkedIn Profile</a></p>
+            <p>🔗 <a href="www.linkedin.com/in/temesgen-yibeltal-231a7122b" target="_blank">LinkedIn Profile</a></p>
         </div>
         """
         st.markdown(contact_html, unsafe_allow_html=True)
