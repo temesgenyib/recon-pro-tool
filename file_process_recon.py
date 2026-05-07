@@ -8,6 +8,31 @@ import io
 st.set_page_config(page_title="ReconPro Terminal", page_icon="🏦", layout="wide")
 
 def run_streamlit_reconciliation():
+    # --- Sidebar - Now includes Contact Info ---
+    with st.sidebar:
+        st.image("https://em-content.zobj.net/source/microsoft-teams/363/bank_1f3e6.png", width=80) # Optional: Added a bank icon
+        st.title("ReconPro Terminal")
+        st.header("System Status")
+        st.info("Cloud Server: Active")
+        st.write(f"Server Time: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+        
+        # --- NEW: Developer Contact Area ---
+        st.divider()
+        st.markdown("### 👨‍💻 Developed By")
+        st.markdown("**Temesgen Yib**")
+        
+        # Links are better formatted as clickable icons or short text
+        contact_html = """
+        <div style="font-size: 0.9em;">
+            <p>📞 Phone: +XXX XXXX XXXX</p>
+            <p>✉️ Email: temesgen@example.com</p>
+            <p>🔗 <a href="https://www.linkedin.com/in/temesgenyib" target="_blank">LinkedIn Profile</a></p>
+        </div>
+        """
+        st.markdown(contact_html, unsafe_allow_html=True)
+        # -----------------------------------
+
+    # --- Main Content Area ---
     st.title("🏦 ReconPro: Bank Reconciliation Terminal")
     st.markdown("""
     **Instructions:**
@@ -15,11 +40,6 @@ def run_streamlit_reconciliation():
     2. Upload your **Data Stream (XML)** file.
     3. Click **Process** to generate the reconciliation report.
     """)
-
-    # --- Sidebar / Header Information ---
-    st.sidebar.header("System Status")
-    st.sidebar.info("Cloud Server: Active")
-    st.sidebar.write(f"Current Time: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
 
     # --- File Uploaders ---
     col1, col2 = st.columns(2)
@@ -29,11 +49,21 @@ def run_streamlit_reconciliation():
         xml_file = st.file_uploader("2. Upload XML Data Stream", type=["xml"])
 
     if excel_file and xml_file:
+        # Check if user clicked run reconciliation button
         if st.button("🚀 Run Reconciliation", use_container_width=True):
             try:
                 # --- Part 1: Process Excel Checklist ---
                 with st.spinner("Analyzing Excel Checklist..."):
+                    # Check for excel extensions explicitly
+                    if not (excel_file.name.endswith('.xlsx') or excel_file.name.endswith('.xls')):
+                         st.error("❌ Critical Error: Please upload a valid Excel file (.xlsx or .xls) for the checklist.")
+                         return
+
                     expected_df = pd.read_excel(excel_file)
+                    
+                    # Force columns to uppercase for comparison to be robust
+                    expected_df.columns = expected_df.columns.str.upper()
+
                     if 'ID' not in expected_df.columns:
                         st.error("❌ Critical Error: The Excel file must have a column exactly named 'ID'.")
                         return
@@ -44,8 +74,13 @@ def run_streamlit_reconciliation():
                 # --- Part 2: Process XML Data ---
                 with st.spinner("Parsing XML Data Stream..."):
                     # Parse the uploaded XML file directly
-                    tree = ET.parse(xml_file)
-                    root = tree.getroot()
+                    try:
+                        tree = ET.parse(xml_file)
+                        root = tree.getroot()
+                    except ET.ParseError:
+                         st.error("❌ Critical Error: Please upload a valid XML file for the data stream.")
+                         return
+
                     all_actual_data = []
                     
                     names, ids = [], []
@@ -88,6 +123,7 @@ def run_streamlit_reconciliation():
 
                 # --- Part 5: Generate Excel Report ---
                 output = io.BytesIO()
+                # Specify engine to avoid warning/error
                 with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
                     actual_df.to_excel(writer, sheet_name='Matched_Data', index=False)
                     pd.DataFrame({"MISSING_ID": list(missing_ids)}).to_excel(writer, sheet_name='ERRORS_Missing', index=False)
@@ -118,6 +154,6 @@ def run_streamlit_reconciliation():
     else:
         st.info("Please upload both required files to activate the reconciliation engine.")
 
-# This is the CRITICAL block that tells Streamlit to run the function
+# CRITICAL block that tells Streamlit to run the function
 if __name__ == "__main__":
     run_streamlit_reconciliation()
