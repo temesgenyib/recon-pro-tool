@@ -2,189 +2,193 @@ import streamlit as st
 import pandas as pd
 from sqlalchemy import create_engine, text
 
-# --- 1. PAGE CONFIG ---
-st.set_page_config(
-    page_title="ReconPro Terminal", 
-    page_icon="🏦", 
-    layout="wide"
-)
+# --- 1. PAGE CONFIGURATION ---
+st.set_page_config(page_title="ReconPro Terminal", page_icon="🏦", layout="wide")
 
-# --- 2. HIGH-VISIBILITY UI STYLING ---
-st.markdown("""
-    <style>
-    /* Force high-visibility text colors */
-    html, body, [class*="css"], .stMarkdown, p, li {
-        color: #1f2937 !important; 
-    }
+# --- 2. THEME & VISUAL REPAIR ---
+def apply_ui_theme():
+    st.markdown("""
+        <style>
+        /* Force Metric Visibility */
+        [data-testid="stMetricValue"] { color: #1e3a8a !important; font-weight: 800 !important; }
+        [data-testid="stMetricLabel"] { color: #475569 !important; font-weight: 600 !important; }
+        
+        /* FIX FOR INVISIBLE TAB TEXT (The marked text in your screenshot) */
+        button[data-baseweb="tab"] p {
+            color: #1e3a8a !important;
+            font-size: 1.1rem !important;
+            font-weight: 700 !important;
+        }
+        button[aria-selected="true"] {
+            border-bottom-color: #ef4444 !important;
+        }
+        button[aria-selected="true"] p {
+            color: #ef4444 !important;
+        }
 
-    /* Main App Background */
-    .stApp {
-        background-color: #f8fafc;
-    }
-
-    /* Top Header Banner */
-    .main-header {
-        background: linear-gradient(90deg, #1e3a8a 0%, #3b82f6 100%);
-        padding: 2.5rem;
-        border-radius: 15px;
-        color: white !important; 
-        text-align: center;
-        margin-bottom: 2rem;
-        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
-    }
-    
-    .main-header h1 {
-        color: white !important;
-        margin-bottom: 0.5rem;
-    }
-
-    /* Sidebar Styling */
-    [data-testid="stSidebar"] {
-        background-color: #ffffff;
-        border-right: 1px solid #e2e8f0;
-    }
-    
-    /* Metric Card Styling */
-    div[data-testid="stMetric"] {
-        background-color: #ffffff;
-        border-radius: 15px;
-        padding: 20px;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-        border: 1px solid #cbd5e1;
-    }
-
-    /* Button Styling */
-    .stButton>button {
-        width: 100%;
-        border-radius: 10px;
-        height: 3.5em;
-        background-color: #1e3a8a;
-        color: white !important;
-        font-weight: bold;
-        border: none;
-    }
-    
-    .stButton>button:hover {
-        background-color: #2563eb;
-        transform: translateY(-2px);
-    }
-
-    /* Footer Styling */
-    .footer {
-        text-align: center;
-        padding: 25px;
-        color: #475569 !important;
-        font-size: 0.9rem;
-        border-top: 1px solid #e2e8f0;
-        margin-top: 50px;
-        line-height: 1.6;
-    }
-    .footer a {
-        color: #2563eb !important;
-        text-decoration: none;
-        font-weight: 600;
-    }
-    </style>
+        /* Sidebar Styling (Matches your Admin Portal screenshot) */
+        section[data-testid="stSidebar"] { background-color: #111827 !important; }
+        section[data-testid="stSidebar"] * { color: white !important; }
+        
+        /* Main Header */
+        .main-header {
+            background: linear-gradient(90deg, #0f172a 0%, #1e3a8a 100%);
+            padding: 2rem; border-radius: 15px; color: white !important; 
+            text-align: center; margin-bottom: 2rem;
+        }
+        .main-header h1 { color: white !important; margin: 0; }
+        
+        /* Metric Box Styling */
+        div[data-testid="stMetric"] {
+            background-color: white !important;
+            border: 1px solid #cbd5e1 !important;
+            border-radius: 12px; padding: 15px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        }
+        </style>
     """, unsafe_allow_html=True)
 
-# --- 3. DATABASE LOGIC ---
+# --- 3. DATABASE ENGINE ---
 @st.cache_resource
 def get_engine():
     try:
         pg = st.secrets["postgres"]
         conn_str = f"postgresql://{pg['user']}:{pg['password']}@{pg['host']}:{pg['port']}/{pg['dbname']}"
         return create_engine(conn_str, pool_pre_ping=True)
-    except Exception as e:
-        st.error(f"❌ Database connection failed.")
-        return None
+    except: return None
 
-def log_to_db(branch_code, expected, found, status):
-    engine = get_engine()
-    if engine:
-        try:
-            with engine.connect() as conn:
-                query = text("""
-                    INSERT INTO reconciliation_audit 
-                    (branch_code, expected_count, found_count, missing_count, status)
-                    VALUES (:b, :e, :f, :m, :s)
-                """)
-                conn.execute(query, {"b": branch_code, "e": expected, "f": found, "m": expected - found, "s": status})
-                conn.commit()
-        except: pass
+# --- 4. AUTHENTICATION GATEKEEPER ---
+if "authenticated" not in st.session_state:
+    st.session_state["authenticated"] = False
 
-# --- 4. DASHBOARD UI ---
-st.markdown('<div class="main-header"><h1>🏦 ReconPro Terminal</h1><p style="color: #dbeafe !important;">Enterprise Financial Reconciliation Engine</p></div>', unsafe_allow_html=True)
+if not st.session_state["authenticated"]:
+    apply_ui_theme()
+    # Dark Login Background
+    st.markdown('<style>.stApp { background: #0f172a !important; }</style>', unsafe_allow_html=True)
+    
+    _, col_mid, _ = st.columns([1, 1.2, 1])
+    with col_mid:
+        st.markdown('<div style="text-align:center; color:white; margin-top:100px;"><h1>🚀 ReconPro Login</h1><p>Financial Reconciliation Terminal</p></div>', unsafe_allow_html=True)
+        with st.container():
+            u = st.text_input("Username")
+            p = st.text_input("Password", type="password")
+            if st.button("Enter Terminal", use_container_width=True):
+                engine = get_engine()
+                if engine:
+                    with engine.connect() as conn:
+                        res = conn.execute(text("SELECT role FROM users WHERE username = :u AND password = :p"), {"u": u, "p": p}).fetchone()
+                        if res:
+                            st.session_state.update({"authenticated": True, "username": u, "role": res[0]})
+                            st.rerun()
+                        else: st.error("Invalid credentials.")
+                else: st.error("DB connection failed.")
+    st.stop()
 
-# Sidebar
+# --- 5. DASHBOARD LAYOUT ---
+apply_ui_theme()
+st.markdown('<div class="main-header"><h1>🚀 Financial Reconciliation Terminal</h1><p>Internal Audit Control | Cooperative Bank of Oromia</p></div>', unsafe_allow_html=True)
+
 with st.sidebar:
-    st.markdown("### 🛠️ Control Panel")
-    branch_id = st.text_input("Branch Identifier", value="BR-ADDIS-01")
+    st.markdown(f"## Welcome, {st.session_state['username']}")
+    if st.button("Logout"):
+        st.session_state["authenticated"] = False
+        st.rerun()
+    st.divider()
+    
+    st.markdown("### 🛡️ Admin Portal")
+    nav_options = ["Reconciliation"]
+    if st.session_state["role"] == "admin":
+        nav_options.append("User Management")
+    nav_options.append("History")
+    
+    menu = st.radio("Navigation", nav_options)
     
     st.divider()
-    with st.expander("Settings & Mapping", expanded=False):
-        sys_col = st.text_input("System Key (T24)", "transaction_id")
-        ext_col = st.text_input("External Key (Partner)", "txn_ref")
+    st.markdown("### ⚙️ Settings")
+    id_col = st.text_input("ID Column", "transaction_id")
+    date_col = st.text_input("Date Column", "date")
+    amt_col = st.text_input("Amount Column", "amount")
+    branch_id = st.text_input("Branch Code", "BR-ADDIS-01")
 
-# File Uploaders
-c1, c2 = st.columns(2)
-with c1:
-    st.markdown("#### 📤 Internal: T24 Core")
-    system_file = st.file_uploader("Upload System CSV", type=['csv'], key="sys_up")
+# --- 6. PAGE LOGIC ---
 
-with c2:
-    st.markdown("#### 📤 External: Partner")
-    external_file = st.file_uploader("Upload External CSV", type=['csv'], key="ext_up")
+if menu == "Reconciliation":
+    c1, c2 = st.columns(2)
+    with c1: sys_file = st.file_uploader("📂 Upload T24 Core Data", type=['csv'])
+    with c2: ext_file = st.file_uploader("📂 Upload Partner Records", type=['csv'])
 
-# --- 5. EXECUTION ENGINE ---
-if system_file and external_file:
-    st.markdown("---")
-    if st.button("🚀 EXECUTE RECONCILIATION"):
-        df_sys = pd.read_csv(system_file)
-        df_ext = pd.read_csv(external_file)
-        
-        df_sys[sys_col] = df_sys[sys_col].astype(str).str.strip()
-        df_ext[ext_col] = df_ext[ext_col].astype(str).str.strip()
-        
-        missing_df = df_sys[~df_sys[sys_col].isin(df_ext[ext_col])]
-        
-        expected, found = len(df_sys), len(df_ext)
-        diff = len(missing_df)
-        status = "Balanced" if diff == 0 else "Discrepancy"
-        
-        m1, m2, m3 = st.columns(3)
-        m1.metric("EXPECTED RECORDS", expected)
-        m2.metric("FOUND RECORDS", found)
-        m3.metric("MISSING", diff, delta=-diff if diff > 0 else 0, delta_color="inverse")
-        
-        if status == "Balanced":
-            st.success("✨ **Reconciliation Successful:** No discrepancies found.")
-        else:
-            st.error(f"🚨 **Discrepancy Detected:** {diff} records missing.")
-            st.dataframe(missing_df, use_container_width=True)
+    if sys_file and ext_file:
+        if st.button("🚀 EXECUTE TRIPLE-LOCK RECONCILIATION", use_container_width=True):
+            df_sys = pd.read_csv(sys_file)
+            df_ext = pd.read_csv(ext_file)
             
-            csv = missing_df.to_csv(index=False).encode('utf-8')
-            st.download_button("📥 Export Discrepancy Report", data=csv, file_name="discrepancy_report.csv")
-        
-        log_to_db(branch_id, expected, found, status)
+            # Cleaning
+            for df in [df_sys, df_ext]:
+                df.columns = df.columns.str.strip()
+                df[id_col] = df[id_col].astype(str).str.strip()
+                if date_col in df.columns:
+                    df[date_col] = df[date_col].astype(str).str.strip()
 
-# --- 6. HISTORY ---
-st.markdown("---")
-with st.expander("📜 View Audit Trail History"):
-    engine = get_engine()
-    if engine:
-        try:
-            with engine.connect() as conn:
-                hist = pd.read_sql("SELECT * FROM reconciliation_audit ORDER BY id DESC LIMIT 5", conn)
-                st.dataframe(hist, use_container_width=True)
-        except:
-            st.info("Log into your database to see the audit trail.")
+            # 1. DUPLICATE CHECK (BOTH SIDES)
+            s_dupes = df_sys[df_sys.duplicated(subset=[id_col], keep=False)].copy()
+            e_dupes = df_ext[df_ext.duplicated(subset=[id_col], keep=False)].copy()
+            total_dupes = len(s_dupes) + len(e_dupes)
 
-# --- 7. FOOTER ---
-st.markdown(f"""
-    <div class="footer">
-        <b>ReconPro Terminal v2.3</b> | High-Visibility Mode<br>
-        Developed by <b>Temesgen Yibeltal</b><br>
-        📧 <a href="mailto:temesgenyib@gmail.com">temesgenyib@gmail.com</a> | 📞 +251941625829<br>
-        © 2026 Cooperative Bank of Oromia
-    </div>
-""", unsafe_allow_html=True)
+            # 2. MULTI-KEY RECON (ID + DATE)
+            merged = pd.merge(df_sys, df_ext, on=[id_col, date_col], how='left', suffixes=('_sys', '_ext'))
+            missing = merged[merged[f'{amt_col}_ext'].isna()].copy()
+            variance = merged[(merged[f'{amt_col}_ext'].notna()) & (merged[f'{amt_col}_sys'] != merged[f'{amt_col}_ext'])].copy()
+
+            # 3. DISPLAY SUMMARY
+            st.divider()
+            m1, m2, m3, m4 = st.columns(4)
+            m1.metric("Total Records", len(df_sys))
+            m2.metric("Unmatched (ID+Date)", len(missing))
+            m3.metric("Value Variances", len(variance))
+            m4.metric("Duplicates (Both Files)", total_dupes, delta="Action Required", delta_color="inverse")
+
+            # 4. TABBED REPORTS (Fixed Visibility)
+            t1, t2, t3 = st.tabs(["🕵️ Discrepancy Analysis", "📉 Value Variances", "⚠️ Duplicate Findings"])
+            
+            with t1:
+                st.write("### Records Missing in Partner File")
+                st.dataframe(missing[[id_col, date_col, f'{amt_col}_sys']], use_container_width=True)
+            
+            with t2:
+                st.write("### Amount Mismatches (Same ID/Date)")
+                st.dataframe(variance[[id_col, date_col, f'{amt_col}_sys', f'{amt_col}_ext']], use_container_width=True)
+                
+            with t3:
+                ca, cb = st.columns(2)
+                with ca: 
+                    st.write("**T24 Duplicates**")
+                    st.dataframe(s_dupes, use_container_width=True)
+                with cb: 
+                    st.write("**Partner Duplicates**")
+                    st.dataframe(e_dupes, use_container_width=True)
+
+            # 5. LOGGING
+            engine = get_engine()
+            if engine:
+                with engine.connect() as conn:
+                    conn.execute(text("INSERT INTO reconciliation_audit (branch_code, expected_count, found_count, missing_count, status) VALUES (:b, :e, :f, :m, :s)"),
+                                 {"b": branch_id[:50], "e": len(df_sys), "f": len(df_ext), "m": len(missing), "s": "Audit Completed"})
+                    conn.commit()
+                st.toast("✅ Audit trail updated.")
+
+elif menu == "User Management":
+    st.subheader("👤 Staff Account Control")
+    with st.form("new_user"):
+        nu, np, nr = st.text_input("Username"), st.text_input("Password", type="password"), st.selectbox("Role", ["admin", "viewer"])
+        if st.form_submit_button("Create Account"):
+            with get_engine().connect() as conn:
+                conn.execute(text("INSERT INTO users (username, password, role) VALUES (:u, :p, :r)"), {"u":nu, "p":np, "r":nr})
+                conn.commit()
+            st.success("User added.")
+
+elif menu == "History":
+    st.subheader("📜 Recent Reconciliation Logs")
+    df_h = pd.read_sql("SELECT * FROM reconciliation_audit ORDER BY id DESC LIMIT 20", get_engine())
+    st.dataframe(df_h, use_container_width=True)
+
+st.markdown('<div style="text-align:center; padding:30px; color:#94a3b8;">© 2026 Cooperative Bank of Oromia | v5.0</div>', unsafe_allow_html=True)
