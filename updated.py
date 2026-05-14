@@ -31,7 +31,7 @@ def log_to_db(branch_code, expected, found, status):
         except Exception as e:
             st.sidebar.error(f"⚠️ Logging Error: {e}")
 
-# --- 2. AUTHENTICATION & USER MGMT ---
+# --- 2. AUTHENTICATION ---
 def login():
     st.title("🔐 ReconPro Secure Access")
     with st.form("login_form"):
@@ -53,13 +53,12 @@ def login():
                     else:
                         st.error("Invalid credentials")
 
-# --- 3. MAIN APPLICATION ---
 if "authenticated" not in st.session_state:
     login()
 else:
     st.set_page_config(page_title="ReconPro Terminal", page_icon="🏦", layout="wide")
     
-    # --- SIDEBAR & ADMIN TOOLS ---
+    # --- SIDEBAR & SETTINGS ---
     st.sidebar.title(f"Welcome, {st.session_state['username']}")
     branch_id = st.sidebar.text_input("Branch Code", value="BR001")
     
@@ -71,58 +70,82 @@ else:
         with st.sidebar.expander("👤 User Management"):
             new_u = st.text_input("New Username")
             new_p = st.text_input("New Password", type="password")
-            new_r = st.selectbox("Role", ["admin", "viewer"])
             if st.button("Create User"):
                 engine = get_engine()
                 with engine.connect() as conn:
-                    conn.execute(
-                        text("INSERT INTO users (username, password, role) VALUES (:u, :p, :r)"),
-                        {"u": new_u, "p": new_p, "r": new_r}
-                    )
+                    conn.execute(text("INSERT INTO users (username, password, role) VALUES (:u, :p, 'viewer')"), {"u": new_u, "p": new_p})
                     conn.commit()
-                    st.success(f"User {new_u} created!")
+                    st.success("User created!")
 
     if st.sidebar.button("Logout"):
         del st.session_state["authenticated"]
         st.rerun()
 
-    # --- MAIN UI ---
+    # --- MAIN UI TABS ---
     st.title("🏦 ReconPro: Automated Reconciliation Terminal")
-    
-    col1, col2 = st.columns(2)
-    with col1:
-        system_file = st.file_uploader("Upload T24 CSV", type=['csv'])
-    with col2:
-        external_file = st.file_uploader("Upload External CSV", type=['csv'])
+    tab1, tab2, tab3 = st.tabs(["🚀 Reconciliation", "📂 Duplicate Check", "📜 Audit History"])
 
-    if system_file and external_file:
-        df_sys = pd.read_csv(system_file)
-        df_ext = pd.read_csv(external_file)
+    # --- TAB 1: RECONCILIATION ---
+    with tab1:
+        col1, col2 = st.columns(2)
+        with col1:
+            system_file = st.file_uploader("Upload T24 CSV", type=['csv'], key="recon_sys")
+        with col2:
+            external_file = st.file_uploader("Upload External CSV", type=['csv'], key="recon_ext")
+
+        if system_file and external_file:
+            df_sys = pd.read_csv(system_file)
+            df_ext = pd.read_csv(external_file)
+            
+            if sys_col not in df_sys.columns or ext_col not in df_ext.columns:
+                st.error("❌ Column mapping mismatch. Please check sidebar settings.")
+            else:
+                if st.button("🚀 Run Reconciliation"):
+                    missing_df = df_sys[~df_sys[sys_col].astype(str).isin(df_ext[ext_col].astype(str))]
+                    status = "Balanced" if len(missing_df) == 0 else "Discrepancy"
+                    
+                    st.divider()
+                    st.metric("Unmatched Records", len(missing_df), delta=len(missing_df), delta_color="inverse")
+                    
+                    if status == "Balanced":
+                        st.success("✅ Reconciliation Successful")
+                    else:
+                        st.error("❌ Discrepancy Found")
+                        st.dataframe(missing_df, use_container_width=True)
+                    
+                    log_to_db(branch_id, len(df_sys), len(df_ext), status)
+
+    # --- TAB 2: DUPLICATE CHECK ---
+    with tab2:
+        st.subheader("🕵️ Data Integrity: Duplicate Detection")
+        st.info("Upload a file to check for duplicate transaction IDs.")
+        dup_file = st.file_uploader("Upload CSV to analyze", type=['csv'])
         
-        # ERROR HANDLING FOR KEYERROR
-        if sys_col not in df_sys.columns:
-            st.error(f"❌ Column '{sys_col}' not found in System File!")
-        elif ext_col not in df_ext.columns:
-            st.error(f"❌ Column '{ext_col}' not found in External File!")
-        else:
-            if st.button("🚀 Run Reconciliation"):
-                # Missing records logic
-                missing_df = df_sys[~df_sys[sys_col].astype(str).isin(df_ext[ext_col].astype(str))]
-                
-                # Metrics
-                st.divider()
-                m1, m2, m3 = st.columns(3)
-                m1.metric("Expected", len(df_sys))
-                m2.metric("Found", len(df_ext))
-                m3.metric("Unmatched", len(missing_df), delta=len(missing_df), delta_color="inverse")
-                
-                if len(missing_df) == 0:
-                    st.success("✅ Balanced")
-                    log_to_db(branch_id, len(df_sys), len(df_ext), "Balanced")
+        if dup_file:
+            df_dup = pd.read_csv(dup_file)
+            id_col = st.selectbox("Select ID column to check", df_dup.columns)
+            
+            if st.button("🔍 Scan for Duplicates"):
+                duplicates = df_dup[df_dup.duplicated(subset=[id_col], keep=False)]
+                if not duplicates.empty:
+                    st.warning(f"Found {len(duplicates)} duplicate entries for {id_col}")
+                    st.dataframe(duplicates.sort_values(by=id_col), use_container_width=True)
                 else:
-                    st.error("❌ Discrepancy Found")
-                    st.dataframe(missing_df, use_container_width=True)
-                    log_to_db(branch_id, len(df_sys), len(df_ext), "Discrepancy")
+                    st.success("✅ No duplicates found in this file.")
+
+    # --- TAB 3: AUDIT HISTORY ---
+    with tab3:
+        st.subheader("📜 Branch Reconciliation Logs")
+        if st.button("🔄 Refresh History"):
+            engine = get_engine()
+            if engine:
+                with engine.connect() as conn:
+                    history = pd.read_sql("SELECT run_date, branch_code, expected_count, found_count, status FROM reconciliation_audit ORDER BY run_date DESC", conn)
+                    st.dataframe(history, use_container_width=True)
+                    
+                    # Small Chart for context
+                    if not history.empty:
+                        st.line_chart(history.set_index('run_date')['expected_count'])
 
     # --- FOOTER ---
     st.markdown("<br><hr><center>Developed by <b>Temesgen Yibeltal</b> | Temenos Core Banking Manager</center>", unsafe_allow_html=True)
