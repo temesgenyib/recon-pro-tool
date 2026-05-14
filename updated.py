@@ -58,7 +58,7 @@ if "authenticated" not in st.session_state:
 else:
     st.set_page_config(page_title="ReconPro Terminal", page_icon="🏦", layout="wide")
     
-    # --- SIDEBAR & SETTINGS ---
+    # --- SIDEBAR ---
     st.sidebar.title(f"Welcome, {st.session_state['username']}")
     branch_id = st.sidebar.text_input("Branch Code", value="BR001")
     
@@ -81,26 +81,29 @@ else:
         del st.session_state["authenticated"]
         st.rerun()
 
-    # --- MAIN UI TABS ---
+    # --- SHARED FILE UPLOADER (Global Scope) ---
     st.title("🏦 ReconPro: Automated Reconciliation Terminal")
+    st.markdown("### 📁 Data Input")
+    u1, u2 = st.columns(2)
+    with u1:
+        sys_file = st.file_uploader("Upload T24 (System) CSV", type=['csv'])
+    with u2:
+        ext_file = st.file_uploader("Upload External Source CSV", type=['csv'])
+
+    # --- MAIN UI TABS ---
     tab1, tab2, tab3 = st.tabs(["🚀 Reconciliation", "📂 Duplicate Check", "📜 Audit History"])
+
+    # Load Dataframes into state if files exist
+    df_sys = pd.read_csv(sys_file) if sys_file else None
+    df_ext = pd.read_csv(ext_file) if ext_file else None
 
     # --- TAB 1: RECONCILIATION ---
     with tab1:
-        col1, col2 = st.columns(2)
-        with col1:
-            system_file = st.file_uploader("Upload T24 CSV", type=['csv'], key="recon_sys")
-        with col2:
-            external_file = st.file_uploader("Upload External CSV", type=['csv'], key="recon_ext")
-
-        if system_file and external_file:
-            df_sys = pd.read_csv(system_file)
-            df_ext = pd.read_csv(external_file)
-            
+        if df_sys is not None and df_ext is not None:
             if sys_col not in df_sys.columns or ext_col not in df_ext.columns:
                 st.error("❌ Column mapping mismatch. Please check sidebar settings.")
             else:
-                if st.button("🚀 Run Reconciliation"):
+                if st.button("🚀 Run Reconciliation Analysis"):
                     missing_df = df_sys[~df_sys[sys_col].astype(str).isin(df_ext[ext_col].astype(str))]
                     status = "Balanced" if len(missing_df) == 0 else "Discrepancy"
                     
@@ -114,24 +117,27 @@ else:
                         st.dataframe(missing_df, use_container_width=True)
                     
                     log_to_db(branch_id, len(df_sys), len(df_ext), status)
+        else:
+            st.info("Please upload both T24 and External files above to start.")
 
     # --- TAB 2: DUPLICATE CHECK ---
     with tab2:
-        st.subheader("🕵️ Data Integrity: Duplicate Detection")
-        st.info("Upload a file to check for duplicate transaction IDs.")
-        dup_file = st.file_uploader("Upload CSV to analyze", type=['csv'])
-        
-        if dup_file:
-            df_dup = pd.read_csv(dup_file)
-            id_col = st.selectbox("Select ID column to check", df_dup.columns)
+        st.subheader("🕵️ Duplicate Detection")
+        if df_sys is not None or df_ext is not None:
+            file_choice = st.radio("Which file would you like to scan?", ["T24 (System)", "External Source"], horizontal=True)
+            target_df = df_sys if file_choice == "T24 (System)" else df_ext
             
-            if st.button("🔍 Scan for Duplicates"):
-                duplicates = df_dup[df_dup.duplicated(subset=[id_col], keep=False)]
-                if not duplicates.empty:
-                    st.warning(f"Found {len(duplicates)} duplicate entries for {id_col}")
-                    st.dataframe(duplicates.sort_values(by=id_col), use_container_width=True)
-                else:
-                    st.success("✅ No duplicates found in this file.")
+            if target_df is not None:
+                id_col = st.selectbox("Select ID column to check for duplicates", target_df.columns)
+                if st.button("🔍 Scan for Duplicates"):
+                    duplicates = target_df[target_df.duplicated(subset=[id_col], keep=False)]
+                    if not duplicates.empty:
+                        st.warning(f"Found {len(duplicates)} duplicate entries in {file_choice}.")
+                        st.dataframe(duplicates.sort_values(by=id_col), use_container_width=True)
+                    else:
+                        st.success(f"✅ No duplicates found in {file_choice} for column '{id_col}'.")
+        else:
+            st.info("Upload files in the header to run a duplicate check.")
 
     # --- TAB 3: AUDIT HISTORY ---
     with tab3:
@@ -142,10 +148,7 @@ else:
                 with engine.connect() as conn:
                     history = pd.read_sql("SELECT run_date, branch_code, expected_count, found_count, status FROM reconciliation_audit ORDER BY run_date DESC", conn)
                     st.dataframe(history, use_container_width=True)
-                    
-                    # Small Chart for context
                     if not history.empty:
                         st.line_chart(history.set_index('run_date')['expected_count'])
 
-    # --- FOOTER ---
     st.markdown("<br><hr><center>Developed by <b>Temesgen Yibeltal</b> | Temenos Core Banking Manager</center>", unsafe_allow_html=True)
